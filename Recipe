@@ -1,0 +1,168 @@
+import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
+import 'package:shared_preferences/shared_preferences.dart';
+import 'dart:convert';
+
+void main() {
+  runApp(
+    ChangeNotifierProvider(
+      create: (context) => FavoritesProvider(),
+      child: MyApp(),
+    ),
+  );
+}
+
+class MyApp extends StatelessWidget {
+  @override
+  Widget build(BuildContext context) {
+    return MaterialApp(
+      title: 'Recipe App',
+      theme: ThemeData.light(),
+      home: RecipeListScreen(),
+    );
+  }
+}
+
+class Recipe {
+  final String name;
+  final String description;
+
+  Recipe({required this.name, required this.description});
+
+  Map<String, dynamic> toMap() {
+    return {
+      'name': name,
+      'description': description,
+    };
+  }
+
+  factory Recipe.fromMap(Map<String, dynamic> map) {
+    return Recipe(
+      name: map['name'],
+      description: map['description'],
+    );
+  }
+}
+
+class FavoritesProvider extends ChangeNotifier {
+  final List<Recipe> _favorites = [];
+  late SharedPreferences _prefs;
+  List<Recipe> get favorites => _favorites;
+
+  FavoritesProvider() {
+    _loadFavorites();
+  }
+
+  Future<void> _loadFavorites() async {
+    _prefs = await SharedPreferences.getInstance();
+    final String? favoritesString = _prefs.getString('favorites');
+    if (favoritesString != null) {
+      final List<dynamic> favoritesJson = jsonDecode(favoritesString);
+      _favorites.addAll(
+          favoritesJson.map((json) => Recipe.fromMap(json)).toList());
+      notifyListeners();
+    }
+  }
+
+  void toggleFavorite(Recipe recipe) {
+    if (_favorites.contains(recipe)) {
+      _favorites.remove(recipe);
+    } else {
+      _favorites.add(recipe);
+    }
+    notifyListeners();
+    _saveFavorites();
+  }
+
+  bool isFavorite(Recipe recipe) {
+    return _favorites.contains(recipe);
+  }
+
+  Future<void> _saveFavorites() async {
+    final String favoritesString =
+        jsonEncode(_favorites.map((recipe) => recipe.toMap()).toList());
+    await _prefs.setString('favorites', favoritesString);
+  }
+}
+
+class RecipeListScreen extends StatelessWidget {
+  final List<Recipe> recipes = [
+    Recipe(name: 'Spaghetti Bolognese', description: 'Classic Italian pasta.'),
+    Recipe(name: 'Chicken Curry', description: 'Rich and spicy curry dish.'),
+    Recipe(name: 'Caesar Salad', description: 'Fresh salad with Caesar dressing.'),
+    Recipe(name: 'Chocolate Cake', description: 'Decadent and moist dessert.'),
+    Recipe(name: 'Sushi Rolls', description: 'Japanese rice and fish rolls.'),
+  ];
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(
+        title: Text('Recipe List'),
+        actions: [
+          IconButton(
+            icon: Icon(Icons.favorite),
+            onPressed: () {
+              Navigator.push(
+                context,
+                MaterialPageRoute(builder: (context) => FavoritesScreen()),
+              );
+            },
+            tooltip: 'View Favorites',
+          ),
+        ],
+      ),
+      body: ListView.builder(
+        itemCount: recipes.length,
+        itemBuilder: (context, index) {
+          final recipe = recipes[index];
+          final favoritesProvider =
+              Provider.of<FavoritesProvider>(context, listen: false);
+
+          return ListTile(
+            title: Text(recipe.name),
+            subtitle: Text(recipe.description),
+            trailing: IconButton(
+              icon: Icon(
+                favoritesProvider.isFavorite(recipe)
+                    ? Icons.favorite
+                    : Icons.favorite_border,
+                color: favoritesProvider.isFavorite(recipe)
+                    ? Colors.red
+                    : null,
+              ),
+              onPressed: () {
+                favoritesProvider.toggleFavorite(recipe);
+              },
+            ),
+          );
+        },
+      ),
+    );
+  }
+}
+
+class FavoritesScreen extends StatelessWidget {
+  @override
+  Widget build(BuildContext context) {
+    final favoritesProvider = Provider.of<FavoritesProvider>(context);
+
+    return Scaffold(
+      appBar: AppBar(
+        title: Text('Favorite Recipes'),
+      ),
+      body: favoritesProvider.favorites.isEmpty
+          ? Center(child: Text('No favorite recipes yet!'))
+          : ListView.builder(
+              itemCount: favoritesProvider.favorites.length,
+              itemBuilder: (context, index) {
+                final recipe = favoritesProvider.favorites[index];
+                return ListTile(
+                  title: Text(recipe.name),
+                  subtitle: Text(recipe.description),
+                );
+              },
+            ),
+    );
+  }
+}
